@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "ptrace.h": "c",
+        "processor-flags.h": "c"
+    }
+}
