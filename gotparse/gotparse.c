@@ -7,6 +7,7 @@
 #include <elf.h>
 #include <string.h>
 #define PATH  "./gotparse"
+#define LOGD(x ...) printf(x)
 int main(void){
 	int fd;
 	fd = open(PATH , O_RDONLY );
@@ -69,7 +70,7 @@ int main(void){
 	
 	//读取符号表
 	Elf32_Sym *dynsymtab = (Elf32_Sym *) malloc(dynsym_shdr->sh_size);
-	printf("dynsym_shdr->sh_size\t0x0x%x\n", dynsym_shdr->sh_size);
+	printf("dynsym_shdr->sh_size\t0x%x\n", dynsym_shdr->sh_size);
 	lseek(fd, dynsym_shdr->sh_offset, SEEK_SET);
 	if(read(fd, dynsymtab, dynsym_shdr->sh_size) != dynsym_shdr->sh_size)
 		return -1;
@@ -79,6 +80,47 @@ int main(void){
 	lseek(fd, relplt_shdr->sh_offset, SEEK_SET);
 	if(read(fd, rel_ent, sizeof(Elf32_Rel)) != sizeof(Elf32_Rel))
 		return -1;
+	
+	char symbol_name[] = "puts";
+	int offset = 0 ;
+	printf("[+] print sizeof elf32_rel 0x%x\n",sizeof(Elf32_Rel));
+	for (i = 0; i < relplt_shdr->sh_size / sizeof(Elf32_Rel); i++)
+	{
+		//r_info 指定重定位符号表索引，r_offse 指定重定位操作的位置。
+		uint16_t ndx = ELF32_R_SYM(rel_ent->r_info);
+		LOGD("ndx = %d, str = %s\n", ndx, dynstr + dynsymtab[ndx].st_name);
+		if (strcmp(dynstr + dynsymtab[ndx].st_name, symbol_name) == 0)
+		{
+			LOGD("符号%s在got表的偏移地址为: 0x%x\n", symbol_name, rel_ent->r_offset);
+			offset = rel_ent->r_offset;
+			break;
+		}
+		if(read(fd, rel_ent, sizeof(Elf32_Rel)) != sizeof(Elf32_Rel))
+		{
+			LOGD("获取符号%s的重定位信息失败\n", symbol_name);
+			return -1;
+		}
+	}
+	//获取指定符号的地址
+	if(offset == 0)
+	{
+		LOGD("获取符号%s在got表中的偏移地址失败，可能为静态链接，开始重新获取符号地址", symbol_name);
+		for(i = 0; i < (dynsym_shdr->sh_size) / sizeof(Elf32_Sym); ++i)
+		{
+			if(strcmp(dynstr + dynsymtab[i].st_name, symbol_name) == 0)
+			{
+				LOGD("符号%s的地址位: 0x%x\n", symbol_name, dynsymtab[i].st_value);
+				offset = dynsymtab[i].st_value;
+				break;
+			}
+		}
+	}
+	if(offset == 0)
+	{
+		LOGD("符号%s地址获取失败\n", symbol_name);
+		return -1;
+	}
+	// 成功解析got偏移
 	
 	return 0;
 }
